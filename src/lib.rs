@@ -11,7 +11,7 @@ use seed::{prelude::*, *};
 
 // `init` describes what should happen when your app started.
 fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
-    Model { counter: 0 }
+    Model { text: "".into() }
 }
 
 // ------ ------
@@ -20,24 +20,24 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
 
 // `Model` describes our app state.
 struct Model {
-    counter: i32,
+    text: String,
 }
 
 // ------ ------
 //    Update
 // ------ ------
 
-// (Remove the line below once any of your `Msg` variants doesn't implement `Copy`.)
-#[derive(Copy, Clone)]
 // `Msg` describes the different events you can modify state with.
 enum Msg {
-    Increment,
+    Change(String),
 }
 
 // `update` describes how to handle each `Msg`.
 fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
     match msg {
-        Msg::Increment => model.counter += 1,
+        Msg::Change(text) => {
+            model.text = text;
+        }
     }
 }
 
@@ -48,9 +48,30 @@ fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
 // `view` describes what to display.
 fn view(model: &Model) -> Node<Msg> {
     div![
-        "This is a counter: ",
-        C!["counter"],
-        button![model.counter, ev(Ev::Click, |_| Msg::Increment),],
+        style!{
+            St::Display => "flex",
+            St::FlexDirection => "row",
+        },
+        div![
+            div![
+                &model.text,
+                style!{St::WhiteSpace => "pre-wrap"},
+            ],
+            style!{St::FlexGrow => "1",},
+        ],
+        div![
+            textarea![
+                style!{
+                    St::Width => "100%",
+                    St::Height => "100%",
+                },
+                input_ev(Ev::Input, Msg::Change),
+            ],
+            style!{
+                St::FlexGrow => "1",
+                St::MinHeight => "400px",
+            },
+        ],
     ]
 }
 
