@@ -5,16 +5,16 @@
 
 use std::str::{self, FromStr};
 
-use nom::character::complete::multispace1;
 use seed::{prelude::*, *};
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
+use nom::character::complete::multispace1;
 use nom::character::{
   complete::{space1, u16},
   streaming::digit1 as digit,
 };
-use nom::combinator::{consumed, map, map_res, opt, peek, recognize};
+use nom::combinator::{map, map_res, opt, peek, recognize};
 use nom::multi::separated_list0;
 use nom::sequence::{delimited, pair, tuple};
 use nom::IResult;
@@ -261,8 +261,7 @@ pub fn start() {
 
 #[cfg(test)]
 mod tests {
-  use nom::error::Error;
-  use nom::error::ErrorKind;
+  use nom::error::{Error, ErrorKind};
 
   use super::*;
 
@@ -336,14 +335,17 @@ mod tests {
       Ok((&b";"[..], vec![Prop::Volume(100), Prop::Seconds(25.0)]))
     );
     assert_eq!(
-      props(b"volume 100\nseconds 127;"),
-      Ok((&b";"[..], vec![Prop::Volume(100), Prop::Seconds(127.0)]))
+      props(b"volume 100\nseconds 127\nexit_if 0;"),
+      Ok((
+        &b";"[..],
+        vec![Prop::Volume(100), Prop::Seconds(127.0), Prop::ExitIf(false)]
+      ))
     );
   }
 
   #[test]
   fn test_simple() {
     let tcl = include_str!("../fixtures/simple.tcl");
-    assert_eq!(tcl, "hoge");
+    // assert_eq!(tcl, "hoge");
   }
 }
