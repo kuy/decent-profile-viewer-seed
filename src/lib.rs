@@ -3,6 +3,7 @@
 // but some rules are too "annoying" or are not applicable for your case.)
 #![allow(clippy::wildcard_imports)]
 
+use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
 use seed::{prelude::*, *};
@@ -120,15 +121,99 @@ enum Prop {
   Flow(f32),
   Volume(u16),
   MaxFlowOrPressureRange(f32),
+  Transition(TransitionType),
   ExitFlowUnder(f32),
   Temperature(f32),
+  // Name(String),
   Pressure(f32),
+  Sensor(SensorType),
+  Pump(PumpType),
+  ExitType(ExitType),
   ExitFlowOver(f32),
   ExitPressureOver(f32),
   MaxFlowOrPressure(f32),
   ExitPressureUnder(f32),
   Seconds(f32),
   Unknown,
+}
+
+#[derive(Clone, Debug)]
+struct UnexpectedValueError(String);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum TransitionType {
+  Fast,
+  Smooth,
+}
+
+impl TryFrom<&[u8]> for TransitionType {
+  type Error = UnexpectedValueError;
+
+  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    let value = str::from_utf8(value).expect("should be convert");
+    let ret = match value {
+      "fast" => TransitionType::Fast,
+      "smooth" => TransitionType::Smooth,
+      _ => return Err(UnexpectedValueError(value.into())),
+    };
+    Ok(ret)
+  }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SensorType {
+  Coffee,
+  Water,
+}
+
+impl From<&str> for SensorType {
+  fn from(value: &str) -> Self {
+    match value {
+      "coffee" => SensorType::Coffee,
+      "water" => SensorType::Water,
+      _ => panic!("Unexpected value: {}", value),
+    }
+  }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PumpType {
+  Flow,
+  Pressure,
+}
+
+impl From<&str> for PumpType {
+  fn from(value: &str) -> Self {
+    match value {
+      "flow" => PumpType::Flow,
+      "pressure" => PumpType::Pressure,
+      _ => panic!("Unexpected value: {}", value),
+    }
+  }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ExitType {
+  PressureUnder,
+  PressureOver,
+  FlowUnder,
+  FlowOver,
+}
+
+impl From<&str> for ExitType {
+  fn from(value: &str) -> Self {
+    match value {
+      "pressure_under" => ExitType::PressureUnder,
+      "pressure_over" => ExitType::PressureOver,
+      "flow_under" => ExitType::FlowUnder,
+      "flow_over" => ExitType::FlowOver,
+      _ => panic!("Unexpected value: {}", value),
+    }
+  }
+}
+
+fn transition_val(i: &[u8]) -> IResult<&[u8], TransitionType> {
+  map_res(alt((tag("fast"), tag("smooth"))), TransitionType::try_from)(i)
 }
 
 fn bool_val(i: &[u8]) -> IResult<&[u8], bool> {
@@ -188,12 +273,20 @@ fn prop_number(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
   }
 }
 
+fn prop_enum<E>() -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
+  |i: &[u8]| {
+    let (i, (_, _, val)) = tuple((tag("transition"), space1, transition_val))(i)?;
+    Ok((i, Prop::Transition(val)))
+  }
+}
+
 fn prop(i: &[u8]) -> IResult<&[u8], Prop> {
   alt((
     prop_bool("exit_if"),
     prop_number("flow"),
     prop_int("volume"),
     prop_number("max_flow_or_pressure_range"),
+    prop_enum::<TransitionType>(),
     prop_number("exit_flow_under"),
     prop_number("temperature"),
     prop_number("pressure"),
@@ -275,6 +368,22 @@ mod tests {
   }
 
   #[test]
+  fn test_transition_val() {
+    assert_eq!(
+      transition_val(b"fast;"),
+      Ok((&b";"[..], TransitionType::Fast))
+    );
+    assert_eq!(
+      transition_val(b"smooth;"),
+      Ok((&b";"[..], TransitionType::Smooth))
+    );
+    assert_eq!(
+      transition_val(b"slow;"),
+      Err(nom::Err::Error(Error::new(&b"slow;"[..], ErrorKind::Tag)))
+    );
+  }
+
+  #[test]
   fn test_prop_name() {
     assert_eq!(prop_name(b"exit_if;"), Ok((&b";"[..], PropName::ExitIf)));
   }
@@ -313,6 +422,26 @@ mod tests {
     assert_eq!(
       prop_volume(b"volume x;"),
       Err(nom::Err::Error(Error::new(&b"x;"[..], ErrorKind::Digit)))
+    );
+  }
+
+  #[test]
+  fn test_prop_enum() {
+    let prop_transition = prop_enum::<TransitionType>();
+    assert_eq!(
+      prop_transition(b"transition fast;"),
+      Ok((&b";"[..], Prop::Transition(TransitionType::Fast)))
+    );
+    assert_eq!(
+      prop_transition(b"transition smooth;"),
+      Ok((&b";"[..], Prop::Transition(TransitionType::Smooth)))
+    );
+    assert_eq!(
+      prop_transition(b"transition smooooch;"),
+      Err(nom::Err::Error(Error::new(
+        &b"smooooch;"[..],
+        ErrorKind::Tag
+      )))
     );
   }
 
