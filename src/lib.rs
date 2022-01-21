@@ -138,6 +138,21 @@ enum Prop {
 }
 
 #[derive(Clone, Debug)]
+struct ConvertError(String);
+
+impl TryFrom<TransitionType> for Prop {
+  type Error = ConvertError;
+
+  fn try_from(value: TransitionType) -> Result<Self, Self::Error> {
+    Ok(Prop::Transition(value))
+  }
+}
+
+trait ParsableEnumProp {
+  fn parse(i: &[u8]) -> IResult<&[u8], Prop>;
+}
+
+#[derive(Clone, Debug)]
 struct UnexpectedValueError(String);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -150,13 +165,20 @@ impl TryFrom<&[u8]> for TransitionType {
   type Error = UnexpectedValueError;
 
   fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-    let value = str::from_utf8(value).expect("should be convert");
+    let value = str::from_utf8(value).expect("should be converted");
     let ret = match value {
       "fast" => TransitionType::Fast,
       "smooth" => TransitionType::Smooth,
       _ => return Err(UnexpectedValueError(value.into())),
     };
     Ok(ret)
+  }
+}
+
+impl ParsableEnumProp for TransitionType {
+  fn parse(i: &[u8]) -> IResult<&[u8], Prop> {
+    let (i, (_, _, val)) = tuple((tag("transition"), space1, transition_val))(i)?;
+    Ok((i, Prop::Transition(val)))
   }
 }
 
@@ -273,11 +295,11 @@ fn prop_number(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
   }
 }
 
-fn prop_enum<E>() -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
-  |i: &[u8]| {
-    let (i, (_, _, val)) = tuple((tag("transition"), space1, transition_val))(i)?;
-    Ok((i, Prop::Transition(val)))
-  }
+fn prop_enum<E>() -> impl Fn(&[u8]) -> IResult<&[u8], Prop>
+where
+  E: ParsableEnumProp,
+{
+  |i: &[u8]| E::parse(i)
 }
 
 fn prop(i: &[u8]) -> IResult<&[u8], Prop> {
@@ -407,13 +429,6 @@ mod tests {
 
   #[test]
   fn test_prop_int() {
-    let prop_flow = prop_int("flow");
-    assert_eq!(prop_flow(b"flow 8;"), Ok((&b";"[..], Prop::Flow(8.0))));
-    assert_eq!(
-      prop_flow(b"flow -1;"),
-      Err(nom::Err::Error(Error::new(&b"-1;"[..], ErrorKind::Digit)))
-    );
-
     let prop_volume = prop_int("volume");
     assert_eq!(
       prop_volume(b"volume 100;"),
@@ -464,10 +479,15 @@ mod tests {
       Ok((&b";"[..], vec![Prop::Volume(100), Prop::Seconds(25.0)]))
     );
     assert_eq!(
-      props(b"volume 100\nseconds 127\nexit_if 0;"),
+      props(b"volume 100\nseconds 127\nexit_if 0\ntransition fast;"),
       Ok((
         &b";"[..],
-        vec![Prop::Volume(100), Prop::Seconds(127.0), Prop::ExitIf(false)]
+        vec![
+          Prop::Volume(100),
+          Prop::Seconds(127.0),
+          Prop::ExitIf(false),
+          Prop::Transition(TransitionType::Fast)
+        ]
       ))
     );
   }
