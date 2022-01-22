@@ -6,10 +6,11 @@
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
+use nom::character::{is_newline, is_space};
 use seed::{prelude::*, *};
 
 use nom::branch::alt;
-use nom::bytes::complete::tag;
+use nom::bytes::complete::{tag, take_till, take_until};
 use nom::character::complete::multispace1;
 use nom::character::{
   complete::{space1, u16},
@@ -110,7 +111,7 @@ impl From<&[u8]> for PropName {
   }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Prop {
   ExitIf(bool),
   Flow(f32),
@@ -119,7 +120,7 @@ enum Prop {
   Transition(TransitionType),
   ExitFlowUnder(f32),
   Temperature(f32),
-  // Name(String),
+  Name(String),
   Pressure(f32),
   Sensor(SensorType),
   Pump(PumpType),
@@ -298,6 +299,26 @@ fn number_val(i: &[u8]) -> IResult<&[u8], f32> {
   }
 }
 
+fn plain_string_val(i: &[u8]) -> IResult<&[u8], String> {
+  let (i, v) = take_till(|c| is_space(c) || is_newline(c))(i)?;
+  Ok((
+    i,
+    String::from_utf8(v.to_vec()).expect("should be converted"),
+  ))
+}
+
+fn bracket_string_val(i: &[u8]) -> IResult<&[u8], String> {
+  let (i, (_, v, _)) = tuple((tag("{"), take_until("}"), tag("}")))(i)?;
+  Ok((
+    i,
+    String::from_utf8(v.to_vec()).expect("should be converted"),
+  ))
+}
+
+fn string_val(i: &[u8]) -> IResult<&[u8], String> {
+  alt((bracket_string_val, plain_string_val))(i)
+}
+
 fn prop_bool(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
   let name = name.to_string();
   move |i: &[u8]| {
@@ -329,7 +350,7 @@ fn prop_number(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
     let prop = match name.as_str() {
       "flow" => Prop::Flow(val),
       "max_flow_or_pressure_range" => Prop::MaxFlowOrPressureRange(val),
-      "exit_flow_under" => Prop::MaxFlowOrPressureRange(val),
+      "exit_flow_under" => Prop::ExitFlowUnder(val),
       "temperature" => Prop::Temperature(val),
       "pressure" => Prop::Pressure(val),
       "exit_flow_over" => Prop::ExitFlowOver(val),
@@ -350,6 +371,18 @@ where
   |i: &[u8]| E::parse(i)
 }
 
+fn prop_string(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
+  let name = name.to_string();
+  move |i: &[u8]| {
+    let (i, (_, _, val)) = tuple((tag(name.as_bytes()), space1, string_val))(i)?;
+    let prop = match name.as_str() {
+      "name" => Prop::Name(val),
+      _ => Prop::Unknown,
+    };
+    Ok((i, prop))
+  }
+}
+
 fn prop(i: &[u8]) -> IResult<&[u8], Prop> {
   alt((
     prop_bool("exit_if"),
@@ -359,6 +392,7 @@ fn prop(i: &[u8]) -> IResult<&[u8], Prop> {
     prop_enum::<TransitionType>(),
     prop_number("exit_flow_under"),
     prop_number("temperature"),
+    prop_string("name"),
     prop_number("pressure"),
     prop_enum::<SensorType>(),
     prop_enum::<PumpType>(),
@@ -441,6 +475,20 @@ mod tests {
   }
 
   #[test]
+  fn test_string_val() {
+    assert_eq!(string_val(b"Fill ;"), Ok((&b" ;"[..], "Fill".into())));
+    assert_eq!(string_val(b"Fill\n;"), Ok((&b"\n;"[..], "Fill".into())));
+    assert_eq!(
+      string_val(b"{Pressure Up};"),
+      Ok((&b";"[..], "Pressure Up".into()))
+    );
+    assert_eq!(
+      string_val(b"{New\n\"Line\"\n\nSupported \n};"),
+      Ok((&b";"[..], "New\n\"Line\"\n\nSupported \n".into()))
+    );
+  }
+
+  #[test]
   fn test_transition_val() {
     assert_eq!(
       transition_val(b"fast;"),
@@ -507,6 +555,23 @@ mod tests {
   }
 
   #[test]
+  fn test_prop_string() {
+    let prop_name = prop_string("name");
+    assert_eq!(
+      prop_name(b"name Fill\n"),
+      Ok((&b"\n"[..], Prop::Name("Fill".into())))
+    );
+    assert_eq!(
+      prop_name(b"name {Pressure Up}\n"),
+      Ok((&b"\n"[..], Prop::Name("Pressure Up".into())))
+    );
+    assert_eq!(
+      prop_name(b"name {}\n"),
+      Ok((&b"\n"[..], Prop::Name("".into())))
+    );
+  }
+
+  #[test]
   fn test_prop() {
     assert_eq!(prop(b"flow 8;"), Ok((&b";"[..], Prop::Flow(8.0))));
     assert_eq!(prop(b"volume 100;"), Ok((&b";"[..], Prop::Volume(100))));
@@ -517,30 +582,32 @@ mod tests {
   }
 
   #[test]
-  fn test_props() {
-    assert_eq!(props(b";"), Ok((&b";"[..], vec![])));
-    assert_eq!(props(b"flow 8;"), Ok((&b";"[..], vec![Prop::Flow(8.0)])));
+  fn test_inner() {
+    let tcl = include_str!("../fixtures/single_step.inner");
     assert_eq!(
-      props(b"volume 100 seconds 25.00;"),
-      Ok((&b";"[..], vec![Prop::Volume(100), Prop::Seconds(25.0)]))
-    );
-    assert_eq!(
-      props(b"volume 100\nseconds 127\nexit_if 0\ntransition fast;"),
+      props(tcl.as_bytes()),
       Ok((
-        &b";"[..],
+        &b".00"[..],
         vec![
+          Prop::ExitIf(true),
+          Prop::Flow(8.0),
           Prop::Volume(100),
-          Prop::Seconds(127.0),
-          Prop::ExitIf(false),
-          Prop::Transition(TransitionType::Fast)
+          Prop::MaxFlowOrPressureRange(0.6),
+          Prop::Transition(TransitionType::Fast),
+          Prop::ExitFlowUnder(0.0),
+          Prop::Temperature(94.0),
+          Prop::Name("Fill".into()),
+          Prop::Pressure(2.0),
+          Prop::Sensor(SensorType::Coffee),
+          Prop::Pump(PumpType::Pressure),
+          Prop::ExitType(ExitType::PressureOver),
+          Prop::ExitFlowOver(6.0),
+          Prop::ExitPressureOver(1.5),
+          Prop::MaxFlowOrPressure(0.0),
+          Prop::ExitPressureUnder(0.0),
+          Prop::Seconds(25.0),
         ]
       ))
     );
-  }
-
-  #[test]
-  fn test_simple() {
-    let tcl = include_str!("../fixtures/simple.tcl");
-    // assert_eq!(tcl, "hoge");
   }
 }
