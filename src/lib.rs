@@ -6,14 +6,14 @@
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
-use nom::character::{is_newline, is_space};
 use seed::{prelude::*, *};
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till, take_until};
-use nom::character::complete::multispace1;
+use nom::character::complete::{multispace0, multispace1};
 use nom::character::{
   complete::{space1, u16},
+  is_newline, is_space,
   streaming::digit1 as digit,
 };
 use nom::combinator::{map, map_res, opt, peek, recognize};
@@ -30,7 +30,6 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
   Model {
     text: "".into(),
     value: 0.0,
-    step: Step(vec![]),
   }
 }
 
@@ -42,15 +41,6 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
 struct Model {
   text: String,
   value: f32,
-  step: Step,
-}
-
-struct Step(Vec<KeyValue>);
-struct Steps(Vec<Step>);
-
-struct KeyValue {
-  key: String,
-  value: String,
 }
 
 // ------ ------
@@ -256,6 +246,9 @@ impl TryFrom<&[u8]> for ExitType {
   }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct Step(Vec<Prop>);
+
 impl ParsableEnumProp for ExitType {
   fn parse(i: &[u8]) -> IResult<&[u8], Prop> {
     let (i, (_, _, val)) = tuple((tag("exit_type"), space1, exit_type_val))(i)?;
@@ -409,12 +402,14 @@ fn props(i: &[u8]) -> IResult<&[u8], Vec<Prop>> {
   separated_list0(multispace1, prop)(i)
 }
 
-// fn category(i: &[u8]) -> IResult<&[u8], &str> {
-//   map_res(
-//     delimited(char('['), take_while(|c| c != b']'), char(']')),
-//     str::from_utf8,
-//   )(i)
-// }
+fn step(i: &[u8]) -> IResult<&[u8], Step> {
+  let (i, (_, _, v, _, _)) = tuple((tag("{"), multispace0, props, multispace0, tag("}")))(i)?;
+  Ok((i, Step(v)))
+}
+
+fn steps(i: &[u8]) -> IResult<&[u8], Vec<Step>> {
+  separated_list0(multispace0, step)(i)
+}
 
 // ------ ------
 //     View
@@ -582,8 +577,8 @@ mod tests {
   }
 
   #[test]
-  fn test_single_step_inner() {
-    let tcl = include_str!("../fixtures/single_step.inner");
+  fn test_step_inner() {
+    let tcl = include_str!("../fixtures/step.inner");
     assert_eq!(
       props(tcl.as_bytes()),
       Ok((
@@ -606,6 +601,93 @@ mod tests {
           Prop::MaxFlowOrPressure(0.0),
           Prop::ExitPressureUnder(0.0),
           Prop::Seconds(25.0),
+        ]
+      ))
+    );
+  }
+
+  #[test]
+  fn test_step_outer() {
+    let tcl = include_str!("../fixtures/step.outer");
+    assert_eq!(
+      step(tcl.as_bytes()),
+      Ok((
+        &b""[..],
+        Step(vec![
+          Prop::ExitIf(true),
+          Prop::Flow(8.0),
+          Prop::Volume(100),
+          Prop::MaxFlowOrPressureRange(0.6),
+          Prop::Transition(TransitionType::Fast),
+          Prop::ExitFlowUnder(0.0),
+          Prop::Temperature(94.0),
+          Prop::Name("Fill".into()),
+          Prop::Pressure(2.0),
+          Prop::Sensor(SensorType::Coffee),
+          Prop::Pump(PumpType::Pressure),
+          Prop::ExitType(ExitType::PressureOver),
+          Prop::ExitFlowOver(6.0),
+          Prop::ExitPressureOver(1.5),
+          Prop::MaxFlowOrPressure(0.0),
+          Prop::ExitPressureUnder(0.0),
+          Prop::Seconds(25.0),
+        ])
+      ))
+    );
+  }
+
+  #[test]
+  fn test_steps_inner() {
+    assert_eq!(
+      steps(&b"{volume 100}\n{flow 8}\n"[..]),
+      Ok((
+        &b"\n"[..],
+        vec![Step(vec![Prop::Volume(100),]), Step(vec![Prop::Flow(8.0)])]
+      ))
+    );
+
+    let tcl = include_str!("../fixtures/steps.inner");
+    assert_eq!(
+      steps(tcl.as_bytes()),
+      Ok((
+        &b"\n"[..],
+        vec![
+          Step(vec![
+            Prop::ExitIf(true),
+            Prop::Flow(8.0),
+            Prop::Volume(100),
+            Prop::MaxFlowOrPressureRange(0.6),
+            Prop::Transition(TransitionType::Fast),
+            Prop::ExitFlowUnder(0.0),
+            Prop::Temperature(94.0),
+            Prop::Name("Fill".into()),
+            Prop::Pressure(2.0),
+            Prop::Sensor(SensorType::Coffee),
+            Prop::Pump(PumpType::Pressure),
+            Prop::ExitType(ExitType::PressureOver),
+            Prop::ExitFlowOver(6.0),
+            Prop::ExitPressureOver(1.5),
+            Prop::MaxFlowOrPressure(0.0),
+            Prop::ExitPressureUnder(0.0),
+            Prop::Seconds(25.0),
+          ]),
+          Step(vec![
+            Prop::ExitIf(false),
+            Prop::Volume(100),
+            Prop::MaxFlowOrPressureRange(0.6),
+            Prop::Transition(TransitionType::Fast),
+            Prop::ExitFlowUnder(0.0),
+            Prop::Temperature(93.0),
+            Prop::Name("Pressure Up".into()),
+            Prop::Pressure(9.0),
+            Prop::Sensor(SensorType::Coffee),
+            Prop::Pump(PumpType::Pressure),
+            Prop::ExitFlowOver(6.0),
+            Prop::ExitPressureOver(11.0),
+            Prop::MaxFlowOrPressure(0.0),
+            Prop::Seconds(4.0),
+            Prop::ExitPressureUnder(0.0),
+          ])
         ]
       ))
     );
