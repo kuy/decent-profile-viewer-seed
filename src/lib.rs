@@ -538,32 +538,60 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
 
   draw_axis(&ctx);
 
-  // draw profile
-  let mut elapsed_time = 0f64;
-  let mut prev_temperature = None;
+  // analyze profile
+  let mut temperature_pos: Vec<(f64, f64, f64, f64)> = vec![];
+  let mut pressure_pos: Vec<(f64, f64, f64, f64)> = vec![];
+  let mut flow_pos: Vec<(f64, f64, f64, f64)> = vec![];
 
-  let temp_ctx = TranslatedContext::new(
-    &ctx,
-    Box::new(scale((0., 180.), (30., 580.))),
-    Box::new(scale((40., 100.), (370., 20.))),
-  );
+  let mut elapsed_time = 0f64;
 
   steps.iter().for_each(|step| {
     let duration = step.seconds() as f64;
     step.0.iter().for_each(|prop| match prop {
       Prop::Temperature(t) => {
         let t = *t as f64;
-        if let Some(prev_t) = prev_temperature {
-          temp_ctx.line(elapsed_time, prev_t, elapsed_time, t);
-          temp_ctx.line(elapsed_time, t, elapsed_time + duration, t);
+        if let Some((.., prev_t)) = temperature_pos.last() {
+          temperature_pos.push((elapsed_time, *prev_t, elapsed_time, t));
+          temperature_pos.push((elapsed_time, t, elapsed_time + duration, t));
         } else {
-          temp_ctx.line(elapsed_time, t, elapsed_time + duration, t);
+          temperature_pos.push((elapsed_time, t, elapsed_time + duration, t));
         }
-        prev_temperature = Some(t);
+      }
+      Prop::Pressure(p) => {
+        let p = *p as f64;
+        if let Some((.., prev_p)) = pressure_pos.last() {
+          pressure_pos.push((elapsed_time, *prev_p, elapsed_time, p));
+          pressure_pos.push((elapsed_time, p, elapsed_time + duration, p));
+        } else {
+          pressure_pos.push((elapsed_time, 0., elapsed_time, p));
+          pressure_pos.push((elapsed_time, p, elapsed_time + duration, p));
+        }
       }
       _ => (),
     });
+
     elapsed_time += duration;
+  });
+
+  let temp_ctx = TranslatedContext::new(
+    &ctx,
+    Box::new(scale((0., elapsed_time), (INNER.0, INNER.2))),
+    Box::new(scale((40., 100.), (INNER.3, INNER.1))),
+  );
+
+  let pressure_ctx = TranslatedContext::new(
+    &ctx,
+    Box::new(scale((0., elapsed_time), (INNER.0, INNER.2))),
+    Box::new(scale((0., 15.), (INNER.3, INNER.1))),
+  );
+
+  // draw profile
+  temperature_pos.iter().for_each(|(x1, y1, x2, y2)| {
+    temp_ctx.line(*x1, *y1, *x2, *y2);
+  });
+
+  pressure_pos.iter().for_each(|(x1, y1, x2, y2)| {
+    pressure_ctx.line(*x1, *y1, *x2, *y2);
   });
 }
 
