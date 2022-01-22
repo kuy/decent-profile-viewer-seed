@@ -110,11 +110,6 @@ impl From<&[u8]> for PropName {
   }
 }
 
-fn prop_name(i: &[u8]) -> IResult<&[u8], PropName> {
-  let (i, name) = alt((tag("exit_if"), tag("flow")))(i)?;
-  Ok((i, PropName::from(name)))
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Prop {
   ExitIf(bool),
@@ -459,11 +454,6 @@ mod tests {
       transition_val(b"slow;"),
       Err(nom::Err::Error(Error::new(&b"slow;"[..], ErrorKind::Tag)))
     );
-  }
-
-  #[test]
-  fn test_prop_name() {
-    assert_eq!(prop_name(b"exit_if;"), Ok((&b";"[..], PropName::ExitIf)));
   }
 
   #[test]
