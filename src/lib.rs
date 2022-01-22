@@ -582,7 +582,7 @@ mod tests {
   }
 
   #[test]
-  fn test_inner() {
+  fn test_single_step_inner() {
     let tcl = include_str!("../fixtures/single_step.inner");
     assert_eq!(
       props(tcl.as_bytes()),
