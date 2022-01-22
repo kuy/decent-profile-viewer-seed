@@ -419,7 +419,7 @@ fn view(model: &Model) -> Node<Msg> {
     },
     div![
       div![view_syntax_error(model.error)],
-      div![format!("{:?}", model.steps),],
+      div![model.steps.iter().map(|step| view_step(step))],
       hr![],
       div![&model.text, style! {St::WhiteSpace => "pre-wrap"},],
       style! {St::Flex => "1 1 0px",},
@@ -452,6 +452,13 @@ fn view_syntax_error(error: bool) -> Vec<Node<Msg>> {
     ]);
   }
   children
+}
+
+fn view_step(step: &Step) -> Node<Msg> {
+  div![
+    step.0.iter().map(|prop| div![format!("{:?}", prop),]),
+    style! { St::Border => "1px solid black" }
+  ]
 }
 
 // ------ ------
