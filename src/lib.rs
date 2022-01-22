@@ -27,7 +27,9 @@ use nom::IResult;
 
 // `init` describes what should happen when your app started.
 fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
+  let profile = include_str!("../fixtures/turbo_bloom.profile");
   Model {
+    init_text: profile.into(),
     text: "".into(),
     steps: vec![],
     error: false,
@@ -40,6 +42,7 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
 
 // `Model` describes our app state.
 struct Model {
+  init_text: String,
   text: String,
   steps: Vec<Step>,
   error: bool,
@@ -426,6 +429,7 @@ fn view(model: &Model) -> Node<Msg> {
     ],
     div![
       textarea![
+        model.init_text.clone(),
         style! {
             St::Width => "100%",
             St::Height => "100%",
