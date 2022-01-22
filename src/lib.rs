@@ -188,13 +188,24 @@ enum SensorType {
   Water,
 }
 
-impl From<&str> for SensorType {
-  fn from(value: &str) -> Self {
-    match value {
+impl TryFrom<&[u8]> for SensorType {
+  type Error = UnexpectedValueError;
+
+  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    let value = str::from_utf8(value).expect("should be converted");
+    let ret = match value {
       "coffee" => SensorType::Coffee,
       "water" => SensorType::Water,
-      _ => panic!("Unexpected value: {}", value),
-    }
+      _ => return Err(UnexpectedValueError(value.into())),
+    };
+    Ok(ret)
+  }
+}
+
+impl ParsableEnumProp for SensorType {
+  fn parse(i: &[u8]) -> IResult<&[u8], Prop> {
+    let (i, (_, _, val)) = tuple((tag("sensor"), space1, sensor_val))(i)?;
+    Ok((i, Prop::Sensor(val)))
   }
 }
 
@@ -204,13 +215,24 @@ enum PumpType {
   Pressure,
 }
 
-impl From<&str> for PumpType {
-  fn from(value: &str) -> Self {
-    match value {
+impl TryFrom<&[u8]> for PumpType {
+  type Error = UnexpectedValueError;
+
+  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    let value = str::from_utf8(value).expect("should be converted");
+    let ret = match value {
       "flow" => PumpType::Flow,
       "pressure" => PumpType::Pressure,
-      _ => panic!("Unexpected value: {}", value),
-    }
+      _ => return Err(UnexpectedValueError(value.into())),
+    };
+    Ok(ret)
+  }
+}
+
+impl ParsableEnumProp for PumpType {
+  fn parse(i: &[u8]) -> IResult<&[u8], Prop> {
+    let (i, (_, _, val)) = tuple((tag("pump"), space1, pump_val))(i)?;
+    Ok((i, Prop::Pump(val)))
   }
 }
 
@@ -222,20 +244,51 @@ enum ExitType {
   FlowOver,
 }
 
-impl From<&str> for ExitType {
-  fn from(value: &str) -> Self {
-    match value {
+impl TryFrom<&[u8]> for ExitType {
+  type Error = UnexpectedValueError;
+
+  fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+    let value = str::from_utf8(value).expect("should be converted");
+    let ret = match value {
       "pressure_under" => ExitType::PressureUnder,
       "pressure_over" => ExitType::PressureOver,
       "flow_under" => ExitType::FlowUnder,
       "flow_over" => ExitType::FlowOver,
-      _ => panic!("Unexpected value: {}", value),
-    }
+      _ => return Err(UnexpectedValueError(value.into())),
+    };
+    Ok(ret)
+  }
+}
+
+impl ParsableEnumProp for ExitType {
+  fn parse(i: &[u8]) -> IResult<&[u8], Prop> {
+    let (i, (_, _, val)) = tuple((tag("exit_type"), space1, exit_type_val))(i)?;
+    Ok((i, Prop::ExitType(val)))
   }
 }
 
 fn transition_val(i: &[u8]) -> IResult<&[u8], TransitionType> {
   map_res(alt((tag("fast"), tag("smooth"))), TransitionType::try_from)(i)
+}
+
+fn sensor_val(i: &[u8]) -> IResult<&[u8], SensorType> {
+  map_res(alt((tag("coffee"), tag("water"))), SensorType::try_from)(i)
+}
+
+fn pump_val(i: &[u8]) -> IResult<&[u8], PumpType> {
+  map_res(alt((tag("flow"), tag("pressure"))), PumpType::try_from)(i)
+}
+
+fn exit_type_val(i: &[u8]) -> IResult<&[u8], ExitType> {
+  map_res(
+    alt((
+      tag("pressure_under"),
+      tag("pressure_over"),
+      tag("flow_under"),
+      tag("flow_over"),
+    )),
+    ExitType::try_from,
+  )(i)
 }
 
 fn bool_val(i: &[u8]) -> IResult<&[u8], bool> {
@@ -312,6 +365,9 @@ fn prop(i: &[u8]) -> IResult<&[u8], Prop> {
     prop_number("exit_flow_under"),
     prop_number("temperature"),
     prop_number("pressure"),
+    prop_enum::<SensorType>(),
+    prop_enum::<PumpType>(),
+    prop_enum::<ExitType>(),
     prop_number("exit_flow_over"),
     prop_number("exit_pressure_over"),
     prop_number("max_flow_or_pressure"),
