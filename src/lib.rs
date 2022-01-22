@@ -18,7 +18,7 @@ use nom::character::{
 };
 use nom::combinator::{map, map_res, opt, peek, recognize};
 use nom::multi::separated_list0;
-use nom::sequence::{delimited, pair, tuple};
+use nom::sequence::{delimited, tuple};
 use nom::IResult;
 
 // ------ ------
@@ -29,7 +29,8 @@ use nom::IResult;
 fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
   Model {
     text: "".into(),
-    value: 0.0,
+    steps: vec![],
+    error: false,
   }
 }
 
@@ -40,7 +41,8 @@ fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
 // `Model` describes our app state.
 struct Model {
   text: String,
-  value: f32,
+  steps: Vec<Step>,
+  error: bool,
 }
 
 // ------ ------
@@ -57,8 +59,13 @@ fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
   match msg {
     Msg::Change(text) => {
       model.text = text.clone();
-      let (_, v) = float(text.as_bytes()).unwrap();
-      model.value = v;
+      match steps(text.as_bytes()) {
+        Ok((_, steps)) => {
+          model.steps = steps;
+          model.error = false;
+        }
+        _ => model.error = true,
+      }
     }
   }
 }
@@ -70,18 +77,6 @@ fn unsigned_float(i: &[u8]) -> IResult<&[u8], f32> {
   )));
   let float_str = map_res(float_bytes, str::from_utf8);
   map_res(float_str, FromStr::from_str)(i)
-}
-
-fn float(i: &[u8]) -> IResult<&[u8], f32> {
-  map(
-    pair(opt(alt((tag("+"), tag("-")))), unsigned_float),
-    |(sign, value)| {
-      sign
-        .and_then(|s| if s[0] == b'-' { Some(-1f32) } else { None })
-        .unwrap_or(1f32)
-        * value
-    },
-  )(i)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -423,9 +418,11 @@ fn view(model: &Model) -> Node<Msg> {
         St::FlexDirection => "row",
     },
     div![
-      div![format!("{}", model.value),],
+      div![view_syntax_error(model.error)],
+      div![format!("{:?}", model.steps),],
+      hr![],
       div![&model.text, style! {St::WhiteSpace => "pre-wrap"},],
-      style! {St::FlexGrow => "1",},
+      style! {St::Flex => "1 1 0px",},
     ],
     div![
       textarea![
@@ -436,11 +433,25 @@ fn view(model: &Model) -> Node<Msg> {
         input_ev(Ev::Input, Msg::Change),
       ],
       style! {
-          St::FlexGrow => "1",
+          St::Flex => "1 1 0px",
           St::MinHeight => "400px",
       },
     ],
   ]
+}
+
+fn view_syntax_error(error: bool) -> Vec<Node<Msg>> {
+  let mut children = vec![];
+  if error {
+    children.push(span![
+      "Syntax Error",
+      style! {
+        St::Color => "red",
+        St::FontWeight => "bold",
+      }
+    ]);
+  }
+  children
 }
 
 // ------ ------
