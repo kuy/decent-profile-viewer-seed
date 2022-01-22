@@ -6,6 +6,7 @@
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
+use seed::prelude::web_sys::CanvasRenderingContext2d;
 use seed::{prelude::*, *};
 
 use nom::branch::alt;
@@ -21,18 +22,25 @@ use nom::multi::separated_list0;
 use nom::sequence::{delimited, tuple};
 use nom::IResult;
 
+use once_cell::sync::Lazy;
+use web_sys::HtmlCanvasElement;
+
 // ------ ------
 //     Init
 // ------ ------
 
 // `init` describes what should happen when your app started.
-fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
-  let profile = include_str!("../fixtures/turbo_bloom.profile");
+fn init(_: Url, orders: &mut impl Orders<Msg>) -> Model {
+  orders.after_next_render(|_| Msg::Rendered);
+
+  // let profile = include_str!("../fixtures/turbo_bloom.profile");
+  let profile = include_str!("../fixtures/londonium.profile");
   Model {
     init_text: profile.into(),
     text: "".into(),
     steps: vec![],
     error: false,
+    canvas: ElRef::default(),
   }
 }
 
@@ -46,6 +54,7 @@ struct Model {
   text: String,
   steps: Vec<Step>,
   error: bool,
+  canvas: ElRef<HtmlCanvasElement>,
 }
 
 // ------ ------
@@ -55,10 +64,11 @@ struct Model {
 // `Msg` describes the different events you can modify state with.
 enum Msg {
   Change(String),
+  Rendered,
 }
 
 // `update` describes how to handle each `Msg`.
-fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
+fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
   match msg {
     Msg::Change(text) => {
       model.text = text.clone();
@@ -69,6 +79,10 @@ fn update(msg: Msg, model: &mut Model, _: &mut impl Orders<Msg>) {
         }
         _ => model.error = true,
       }
+    }
+    Msg::Rendered => {
+      draw(&model.canvas, &model.steps);
+      orders.after_next_render(|_| Msg::Rendered).skip();
     }
   }
 }
@@ -247,6 +261,42 @@ impl TryFrom<&[u8]> for ExitType {
 #[derive(Clone, Debug, PartialEq)]
 struct Step(Vec<Prop>);
 
+impl Step {
+  fn get(&self, prop_name: &str) -> Option<&Prop> {
+    self.0.iter().find(|prop| match prop {
+      Prop::ExitIf(_) => prop_name == "exit_if",
+      Prop::Flow(_) => prop_name == "flow",
+      Prop::Volume(_) => prop_name == "volume",
+      Prop::MaxFlowOrPressureRange(_) => prop_name == "max_flow_or_pressure_range",
+      Prop::Transition(_) => prop_name == "transition",
+      Prop::ExitFlowUnder(_) => prop_name == "exit_flow_under",
+      Prop::Temperature(_) => prop_name == "temperature",
+      Prop::Name(_) => prop_name == "name",
+      Prop::Pressure(_) => prop_name == "pressure",
+      Prop::Sensor(_) => prop_name == "sensor",
+      Prop::Pump(_) => prop_name == "pump",
+      Prop::ExitType(_) => prop_name == "exit_type",
+      Prop::ExitFlowOver(_) => prop_name == "exit_flow_over",
+      Prop::ExitPressureOver(_) => prop_name == "exit_pressure_over",
+      Prop::MaxFlowOrPressure(_) => prop_name == "max_flow_or_pressure",
+      Prop::ExitPressureUnder(_) => prop_name == "exit_pressure_under",
+      Prop::Seconds(_) => prop_name == "seconds",
+      _ => false,
+    })
+  }
+
+  fn seconds(&self) -> f32 {
+    let prop = self.0.iter().find(|prop| match prop {
+      Prop::Seconds(_) => true,
+      _ => false,
+    });
+    match prop {
+      Some(Prop::Seconds(v)) => *v,
+      _ => panic!("not found"),
+    }
+  }
+}
+
 impl ParsableEnumProp for ExitType {
   fn parse(i: &[u8]) -> IResult<&[u8], Prop> {
     let (i, (_, _, val)) = tuple((tag("exit_type"), space1, exit_type_val))(i)?;
@@ -421,6 +471,16 @@ fn view(model: &Model) -> Node<Msg> {
         St::FlexDirection => "row",
     },
     div![
+      canvas![
+        el_ref(&model.canvas),
+        attrs![
+            At::Width => px(600),
+            At::Height => px(400),
+        ],
+        style![
+            St::Border => "1px solid black",
+        ],
+      ],
       div![view_syntax_error(model.error)],
       div![model.steps.iter().map(|step| view_step(step))],
       hr![],
@@ -463,6 +523,124 @@ fn view_step(step: &Step) -> Node<Msg> {
     step.0.iter().map(|prop| div![format!("{:?}", prop),]),
     style! { St::Border => "1px solid black" }
   ]
+}
+
+static CANVAS: Lazy<(f64, f64)> = Lazy::new(|| (600., 400.));
+static INNER: Lazy<(f64, f64, f64, f64)> = Lazy::new(|| (30., 20., 580., 370.));
+
+fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
+  let canvas = canvas.get().expect("should get canvas");
+  let ctx = seed::canvas_context_2d(&canvas);
+
+  // clear canvas
+  ctx.begin_path();
+  ctx.clear_rect(0., 0., CANVAS.0, CANVAS.1);
+
+  draw_axis(&ctx);
+
+  // draw profile
+  let mut elapsed_time = 0f64;
+  let mut prev_temperature = None;
+
+  let temp_ctx = TranslatedContext::new(
+    &ctx,
+    Box::new(scale((0., 180.), (30., 580.))),
+    Box::new(scale((40., 100.), (370., 20.))),
+  );
+
+  steps.iter().for_each(|step| {
+    let duration = step.seconds() as f64;
+    step.0.iter().for_each(|prop| match prop {
+      Prop::Temperature(t) => {
+        let t = *t as f64;
+        if let Some(prev_t) = prev_temperature {
+          temp_ctx.line(elapsed_time, prev_t, elapsed_time, t);
+          temp_ctx.line(elapsed_time, t, elapsed_time + duration, t);
+        } else {
+          temp_ctx.line(elapsed_time, t, elapsed_time + duration, t);
+        }
+        prev_temperature = Some(t);
+      }
+      _ => (),
+    });
+    elapsed_time += duration;
+  });
+}
+
+fn draw_axis(ctx: &CanvasRenderingContext2d) {
+  // x-axis
+  ctx.move_to(INNER.0, INNER.3);
+  ctx.line_to(INNER.2, INNER.3);
+  ctx.stroke();
+
+  // y-axis
+  ctx.move_to(INNER.0, INNER.3);
+  ctx.line_to(INNER.0, INNER.1);
+  ctx.stroke();
+}
+
+struct TranslatedContext {
+  ctx: CanvasRenderingContext2d,
+  x: Box<dyn Fn(f64) -> f64>,
+  y: Box<dyn Fn(f64) -> f64>,
+}
+
+impl TranslatedContext {
+  fn new(
+    ctx: &CanvasRenderingContext2d,
+    x: Box<dyn Fn(f64) -> f64>,
+    y: Box<dyn Fn(f64) -> f64>,
+  ) -> Self {
+    Self {
+      ctx: ctx.clone(),
+      x,
+      y,
+    }
+  }
+
+  fn line(&self, x1: f64, y1: f64, x2: f64, y2: f64) {
+    let (tx1, ty1) = self.translate(x1, y1);
+    self.ctx.move_to(tx1, ty1);
+
+    let (tx2, ty2) = self.translate(x2, y2);
+    self.ctx.line_to(tx2, ty2);
+
+    self.ctx.stroke();
+  }
+
+  fn translate(&self, x: f64, y: f64) -> (f64, f64) {
+    ((self.x)(x), (self.y)(y))
+  }
+}
+
+pub fn scale(domain: (f64, f64), codomain: (f64, f64)) -> impl Fn(f64) -> f64 {
+  let (input_min, input_max) = domain;
+  assert!(input_min <= input_max, "{} <= {}", input_min, input_max);
+
+  let mut inverted = false;
+  let (mut output_min, mut output_max) = codomain;
+  if output_max < output_min {
+    output_min = codomain.1;
+    output_max = codomain.0;
+    inverted = true;
+  }
+
+  move |input| {
+    if input <= input_min {
+      return if inverted { output_max } else { output_min };
+    }
+
+    if input_max <= input {
+      return if inverted { output_min } else { output_max };
+    }
+
+    let ratio = (input - input_min) / (input_max - input_min);
+    if inverted {
+      output_max - (output_max - output_min) * ratio
+    } else {
+      (output_max - output_min) * ratio + output_min
+    }
+  }
 }
 
 // ------ ------
@@ -713,5 +891,33 @@ mod tests {
         ]
       ))
     );
+  }
+
+  #[test]
+  fn test_scale() {
+    let x = scale((0., 100.), (100., 400.));
+    assert_eq!(x(0.), 100.);
+    assert_eq!(x(100.), 400.);
+
+    assert_eq!(x(25.), 175.);
+    assert_eq!(x(50.), 250.);
+    assert_eq!(x(75.), 325.);
+
+    assert_eq!(x(-1.2), 100.);
+    assert_eq!(x(101.), 400.);
+  }
+
+  #[test]
+  fn test_scale_inverted() {
+    let y = scale((0., 100.), (370., 20.));
+    assert_eq!(y(0.), 370.);
+    assert_eq!(y(100.), 20.);
+
+    assert_eq!(y(25.), 282.5);
+    assert_eq!(y(50.), 195.);
+    assert_eq!(y(75.), 107.5);
+
+    assert_eq!(y(-10.), 370.);
+    assert_eq!(y(100.5), 20.);
   }
 }
