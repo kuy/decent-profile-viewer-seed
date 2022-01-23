@@ -625,7 +625,7 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
   let temp_ctx = TranslatedContext::new(
     &ctx,
     Box::new(scale((0., elapsed_time), (INNER.0, INNER.2))),
-    Box::new(scale((40., 100.), (INNER.3, INNER.1))),
+    Box::new(scale((20., 100.), (INNER.3, INNER.1))),
   );
 
   let pressure_ctx = TranslatedContext::new(
