@@ -578,21 +578,42 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
           temperature_pos.push((elapsed_time, t, elapsed_time + duration, t));
         }
       }
-      Prop::Pressure(p) => {
-        let p = *p as f64;
-        if let Some((.., prev_p)) = pressure_pos.last() {
-          match transition {
-            TransitionType::Fast => {
-              pressure_pos.push((elapsed_time, *prev_p, elapsed_time, p));
-              pressure_pos.push((elapsed_time, p, elapsed_time + duration, p));
+      Prop::Pressure(v) => {
+        if pump == PumpType::Pressure {
+          let v = *v as f64;
+          if let Some((.., prev_v)) = pressure_pos.last() {
+            match transition {
+              TransitionType::Fast => {
+                pressure_pos.push((elapsed_time, *prev_v, elapsed_time, v));
+                pressure_pos.push((elapsed_time, v, elapsed_time + duration, v));
+              }
+              TransitionType::Smooth => {
+                pressure_pos.push((elapsed_time, *prev_v, elapsed_time + duration, v));
+              }
             }
-            TransitionType::Smooth => {
-              pressure_pos.push((elapsed_time, *prev_p, elapsed_time + duration, p));
-            }
+          } else {
+            pressure_pos.push((elapsed_time, 0., elapsed_time, v));
+            pressure_pos.push((elapsed_time, v, elapsed_time + duration, v));
           }
-        } else {
-          pressure_pos.push((elapsed_time, 0., elapsed_time, p));
-          pressure_pos.push((elapsed_time, p, elapsed_time + duration, p));
+        }
+      }
+      Prop::Flow(v) => {
+        if pump == PumpType::Flow {
+          let v = *v as f64;
+          if let Some((.., prev_v)) = flow_pos.last() {
+            match transition {
+              TransitionType::Fast => {
+                flow_pos.push((elapsed_time, *prev_v, elapsed_time, v));
+                flow_pos.push((elapsed_time, v, elapsed_time + duration, v));
+              }
+              TransitionType::Smooth => {
+                flow_pos.push((elapsed_time, *prev_v, elapsed_time + duration, v));
+              }
+            }
+          } else {
+            flow_pos.push((elapsed_time, 0., elapsed_time, v));
+            flow_pos.push((elapsed_time, v, elapsed_time + duration, v));
+          }
         }
       }
       _ => (),
@@ -610,7 +631,13 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
   let pressure_ctx = TranslatedContext::new(
     &ctx,
     Box::new(scale((0., elapsed_time), (INNER.0, INNER.2))),
-    Box::new(scale((0., 15.), (INNER.3, INNER.1))),
+    Box::new(scale((0., 12.), (INNER.3, INNER.1))),
+  );
+
+  let flow_ctx = TranslatedContext::new(
+    &ctx,
+    Box::new(scale((0., elapsed_time), (INNER.0, INNER.2))),
+    Box::new(scale((0., 12.), (INNER.3, INNER.1))),
   );
 
   // draw profile
@@ -620,6 +647,10 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
 
   pressure_pos.iter().for_each(|(x1, y1, x2, y2)| {
     pressure_ctx.line(*x1, *y1, *x2, *y2, "darkgreen");
+  });
+
+  flow_pos.iter().for_each(|(x1, y1, x2, y2)| {
+    flow_ctx.line(*x1, *y1, *x2, *y2, "darkblue");
   });
 }
 
