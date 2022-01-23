@@ -3,6 +3,7 @@
 // but some rules are too "annoying" or are not applicable for your case.)
 #![allow(clippy::wildcard_imports)]
 
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::{self, FromStr};
 
@@ -22,6 +23,7 @@ use nom::multi::separated_list0;
 use nom::sequence::{delimited, tuple};
 use nom::IResult;
 
+use include_dir::{include_dir, Dir};
 use once_cell::sync::Lazy;
 use web_sys::HtmlCanvasElement;
 
@@ -33,14 +35,12 @@ use web_sys::HtmlCanvasElement;
 fn init(_: Url, orders: &mut impl Orders<Msg>) -> Model {
   orders.after_next_render(|_| Msg::Rendered);
 
-  // let profile = include_str!("../fixtures/turbo_bloom.profile");
-  let profile = include_str!("../fixtures/londonium.profile");
   Model {
-    init_text: profile.into(),
     text: "".into(),
     steps: vec![],
     error: false,
     canvas: ElRef::default(),
+    selected: None,
   }
 }
 
@@ -50,12 +50,41 @@ fn init(_: Url, orders: &mut impl Orders<Msg>) -> Model {
 
 // `Model` describes our app state.
 struct Model {
-  init_text: String,
   text: String,
   steps: Vec<Step>,
   error: bool,
   canvas: ElRef<HtmlCanvasElement>,
+  selected: Option<String>,
 }
+
+struct Preset {
+  name: String,
+  data: String,
+}
+
+static PROFILES_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/profiles");
+
+static PRESETS: Lazy<HashMap<String, Preset>> = Lazy::new(|| {
+  let mut map = HashMap::default();
+  for file in PROFILES_DIR.files() {
+    let data = file.contents_utf8().unwrap().to_string();
+    for line in data.lines() {
+      if line.starts_with("advanced_shot") && !line.ends_with("{}") {
+        let end = line.len() - 1;
+        let name = file.path().file_name().unwrap().to_str().unwrap();
+        map.insert(
+          name.to_string(),
+          Preset {
+            name: name.into(),
+            data: format!("{}\n", line[15..end].to_string()),
+          },
+        );
+        break;
+      }
+    }
+  }
+  map
+});
 
 // ------ ------
 //    Update
@@ -65,6 +94,7 @@ struct Model {
 enum Msg {
   Change(String),
   Rendered,
+  Select(String),
 }
 
 // `update` describes how to handle each `Msg`.
@@ -84,7 +114,17 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
       draw(&model.canvas, &model.steps);
       orders.after_next_render(|_| Msg::Rendered).skip();
     }
+    Msg::Select(value) => {
+      model.selected = Some(value.clone());
+
+      let data = PRESETS.get(&value).expect("should exist").data.clone();
+      orders.send_msg(Msg::Change(data));
+    }
   }
+}
+
+fn console_log(msg: String) {
+  web_sys::console::log_1(&JsValue::from_str(msg.as_str()));
 }
 
 fn unsigned_float(i: &[u8]) -> IResult<&[u8], f32> {
@@ -506,8 +546,11 @@ fn view(model: &Model) -> Node<Msg> {
       style! {St::Flex => "1 1 0px",},
     ],
     div![
+      div![view_profile_selector()],
       textarea![
-        model.init_text.clone(),
+        attrs! {
+          At::Value => model.text.clone(),
+        },
         style! {
             St::Width => "100%",
             St::Height => "100%",
@@ -540,6 +583,16 @@ fn view_step(step: &Step) -> Node<Msg> {
   div![
     step.0.iter().map(|prop| div![format!("{:?}", prop),]),
     style! { St::Border => "1px solid black" }
+  ]
+}
+
+fn view_profile_selector() -> Node<Msg> {
+  select![
+    option!["--- select profile ---"],
+    PRESETS
+      .iter()
+      .map(|(name, _)| option![attrs! { At::Value => name }, name.as_str()]),
+    input_ev(Ev::Change, Msg::Select)
   ]
 }
 
