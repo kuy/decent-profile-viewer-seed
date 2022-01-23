@@ -292,7 +292,25 @@ impl Step {
     });
     match prop {
       Some(Prop::Seconds(v)) => *v,
-      _ => panic!("not found"),
+      _ => panic!("not found: seconds"),
+    }
+  }
+
+  fn pump(&self) -> PumpType {
+    let prop = self.0.iter().find(|prop| match prop {
+      Prop::Pump(_) => true,
+      _ => false,
+    });
+    match prop {
+      Some(Prop::Pump(v)) => *v,
+      _ => panic!("not found: pump"),
+    }
+  }
+
+  fn transition(&self) -> TransitionType {
+    match self.get("transition") {
+      Some(Prop::Transition(v)) => *v,
+      _ => panic!("not found: transition"),
     }
   }
 }
@@ -547,6 +565,9 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
 
   steps.iter().for_each(|step| {
     let duration = step.seconds() as f64;
+    let transition = step.transition();
+    let pump = step.pump();
+
     step.0.iter().for_each(|prop| match prop {
       Prop::Temperature(t) => {
         let t = *t as f64;
@@ -560,8 +581,15 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
       Prop::Pressure(p) => {
         let p = *p as f64;
         if let Some((.., prev_p)) = pressure_pos.last() {
-          pressure_pos.push((elapsed_time, *prev_p, elapsed_time, p));
-          pressure_pos.push((elapsed_time, p, elapsed_time + duration, p));
+          match transition {
+            TransitionType::Fast => {
+              pressure_pos.push((elapsed_time, *prev_p, elapsed_time, p));
+              pressure_pos.push((elapsed_time, p, elapsed_time + duration, p));
+            }
+            TransitionType::Smooth => {
+              pressure_pos.push((elapsed_time, *prev_p, elapsed_time + duration, p));
+            }
+          }
         } else {
           pressure_pos.push((elapsed_time, 0., elapsed_time, p));
           pressure_pos.push((elapsed_time, p, elapsed_time + duration, p));
@@ -587,15 +615,18 @@ fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
 
   // draw profile
   temperature_pos.iter().for_each(|(x1, y1, x2, y2)| {
-    temp_ctx.line(*x1, *y1, *x2, *y2);
+    temp_ctx.line(*x1, *y1, *x2, *y2, "darkred");
   });
 
   pressure_pos.iter().for_each(|(x1, y1, x2, y2)| {
-    pressure_ctx.line(*x1, *y1, *x2, *y2);
+    pressure_ctx.line(*x1, *y1, *x2, *y2, "darkgreen");
   });
 }
 
 fn draw_axis(ctx: &CanvasRenderingContext2d) {
+  ctx.begin_path();
+  ctx.set_stroke_style(&JsValue::from_str("gray"));
+
   // x-axis
   ctx.move_to(INNER.0, INNER.3);
   ctx.line_to(INNER.2, INNER.3);
@@ -626,7 +657,10 @@ impl TranslatedContext {
     }
   }
 
-  fn line(&self, x1: f64, y1: f64, x2: f64, y2: f64) {
+  fn line(&self, x1: f64, y1: f64, x2: f64, y2: f64, color: &str) {
+    self.ctx.begin_path();
+    self.ctx.set_stroke_style(&JsValue::from_str(color));
+
     let (tx1, ty1) = self.translate(x1, y1);
     self.ctx.move_to(tx1, ty1);
 
