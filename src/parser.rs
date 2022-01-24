@@ -42,6 +42,7 @@ pub enum Prop {
   MaxFlowOrPressure(f32),
   ExitPressureUnder(f32),
   Seconds(f32),
+  Weight(f32),
   Unknown((String, String)),
 }
 
@@ -191,6 +192,7 @@ impl Step {
       Prop::MaxFlowOrPressure(_) => prop_name == "max_flow_or_pressure",
       Prop::ExitPressureUnder(_) => prop_name == "exit_pressure_under",
       Prop::Seconds(_) => prop_name == "seconds",
+      Prop::Weight(_) => prop_name == "weight",
       _ => false,
     })
   }
@@ -316,6 +318,7 @@ fn prop_number(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
       "max_flow_or_pressure" => Prop::MaxFlowOrPressure(val),
       "exit_pressure_under" => Prop::ExitPressureUnder(val),
       "seconds" => Prop::Seconds(val),
+      "weight" => Prop::Weight(val),
       _ => Prop::Unknown((name.clone(), format!("{}", val))),
     };
     Ok((i, prop))
@@ -360,6 +363,7 @@ fn prop(i: &[u8]) -> IResult<&[u8], Prop> {
     prop_number("max_flow_or_pressure"),
     prop_number("exit_pressure_under"),
     prop_number("seconds"),
+    prop_number("weight"),
   ))(i)
 }
 
@@ -590,6 +594,7 @@ mod tests {
             Prop::Transition(TransitionType::Fast),
             Prop::ExitFlowUnder(0.0),
             Prop::Temperature(93.0),
+            Prop::Weight(0.0),
             Prop::Name("Pressure Up".into()),
             Prop::Pressure(9.0),
             Prop::Sensor(SensorType::Coffee),
