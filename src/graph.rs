@@ -44,7 +44,7 @@ pub fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
       }
       Prop::Pressure(v) => {
         if pump == PumpType::Pressure {
-          if let (Some(PumpType::Flow), Some((_, _, px, py))) = (prev_pump, flow_pos.last()) {
+          if let (Some(PumpType::Flow), Some((.., px, py))) = (prev_pump, flow_pos.last()) {
             flow_pos.push((*px, *py, *px, 0.));
           }
 
@@ -67,8 +67,7 @@ pub fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
       }
       Prop::Flow(v) => {
         if pump == PumpType::Flow {
-          if let (Some(PumpType::Pressure), Some((_, _, px, py))) = (prev_pump, pressure_pos.last())
-          {
+          if let (Some(PumpType::Pressure), Some((.., px, py))) = (prev_pump, pressure_pos.last()) {
             pressure_pos.push((*px, *py, *px, 0.));
           }
 
