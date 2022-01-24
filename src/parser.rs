@@ -42,7 +42,7 @@ pub enum Prop {
   MaxFlowOrPressure(f32),
   ExitPressureUnder(f32),
   Seconds(f32),
-  Unknown,
+  Unknown((String, String)),
 }
 
 #[derive(Clone, Debug)]
@@ -294,7 +294,7 @@ fn prop_bool(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
     let (i, (_, _, val)) = tuple((tag(name.as_bytes()), space1, bool_val))(i)?;
     let prop = match name.as_str() {
       "exit_if" => Prop::ExitIf(val),
-      _ => Prop::Unknown,
+      _ => Prop::Unknown((name.clone(), format!("{}", val))),
     };
     Ok((i, prop))
   }
@@ -306,7 +306,7 @@ fn prop_int(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
     let (i, (_, _, val)) = tuple((tag(name.as_bytes()), space1, u16))(i)?;
     let prop = match name.as_str() {
       "volume" => Prop::Volume(val),
-      _ => Prop::Unknown,
+      _ => Prop::Unknown((name.clone(), format!("{}", val))),
     };
     Ok((i, prop))
   }
@@ -327,7 +327,7 @@ fn prop_number(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
       "max_flow_or_pressure" => Prop::MaxFlowOrPressure(val),
       "exit_pressure_under" => Prop::ExitPressureUnder(val),
       "seconds" => Prop::Seconds(val),
-      _ => Prop::Unknown,
+      _ => Prop::Unknown((name.clone(), format!("{}", val))),
     };
     Ok((i, prop))
   }
@@ -340,13 +340,13 @@ where
   |i: &[u8]| E::parse(i)
 }
 
-fn prop_string(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
+pub fn prop_string(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
   let name = name.to_string();
   move |i: &[u8]| {
     let (i, (_, _, val)) = tuple((tag(name.as_bytes()), space1, string_val))(i)?;
     let prop = match name.as_str() {
       "name" => Prop::Name(val),
-      _ => Prop::Unknown,
+      _ => Prop::Unknown((name.clone(), format!("{}", val))),
     };
     Ok((i, prop))
   }

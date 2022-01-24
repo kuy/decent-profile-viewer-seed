@@ -17,6 +17,8 @@ use graph::draw;
 use parser::{steps, Step};
 use profile::PROFILES;
 
+use crate::profile::Preset;
+
 // ------ ------
 //     Init
 // ------ ------
@@ -75,10 +77,12 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
       draw(&model.canvas, &model.steps);
       orders.after_next_render(|_| Msg::Rendered).skip();
     }
-    Msg::Select(value) => {
-      model.selected = Some(value.clone());
+    Msg::Select(file_name) => {
+      crate::utils::console_log(format!("{}", file_name));
 
-      let data = PROFILES.get(&value).expect("should exist").data.clone();
+      model.selected = Some(file_name.clone());
+
+      let data = PROFILES.get(&file_name).expect("should exist").data.clone();
       orders.send_msg(Msg::Change(data));
     }
   }
@@ -154,11 +158,17 @@ fn view_step(step: &Step) -> Node<Msg> {
 }
 
 fn view_profile_selector() -> Node<Msg> {
+  let mut presets = PROFILES
+    .iter()
+    .map(|(file_name, preset)| (file_name.clone(), preset.clone()))
+    .collect::<Vec<(String, Preset)>>();
+  presets.sort_by(|(_, p1), (_, p2)| p1.title.cmp(&p2.title));
+
   select![
     option!["--- select profile ---"],
-    PROFILES
+    presets
       .iter()
-      .map(|(name, _)| option![attrs! { At::Value => name }, name.as_str()]),
+      .map(|(file_name, preset)| option![attrs! { At::Value => file_name }, preset.title.as_str()]),
     input_ev(Ev::Change, Msg::Select)
   ]
 }
