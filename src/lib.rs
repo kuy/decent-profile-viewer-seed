@@ -78,8 +78,6 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
       orders.after_next_render(|_| Msg::Rendered).skip();
     }
     Msg::Select(file_name) => {
-      crate::utils::console_log(format!("{}", file_name));
-
       model.selected = Some(file_name.clone());
 
       let data = PROFILES.get(&file_name).expect("should exist").data.clone();

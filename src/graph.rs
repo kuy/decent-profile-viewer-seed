@@ -25,6 +25,7 @@ pub fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
   let mut flow_pos: Vec<(f64, f64, f64, f64)> = vec![];
 
   let mut elapsed_time = 0f64;
+  let mut prev_pump = None;
 
   steps.iter().for_each(|step| {
     let duration = step.seconds() as f64;
@@ -43,6 +44,10 @@ pub fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
       }
       Prop::Pressure(v) => {
         if pump == PumpType::Pressure {
+          if let (Some(PumpType::Flow), Some((_, _, px, py))) = (prev_pump, flow_pos.last()) {
+            flow_pos.push((*px, *py, *px, 0.));
+          }
+
           let v = *v as f64;
           if let Some((.., prev_v)) = pressure_pos.last() {
             match transition {
@@ -62,6 +67,11 @@ pub fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
       }
       Prop::Flow(v) => {
         if pump == PumpType::Flow {
+          if let (Some(PumpType::Pressure), Some((_, _, px, py))) = (prev_pump, pressure_pos.last())
+          {
+            pressure_pos.push((*px, *py, *px, 0.));
+          }
+
           let v = *v as f64;
           if let Some((.., prev_v)) = flow_pos.last() {
             match transition {
@@ -83,6 +93,7 @@ pub fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
     });
 
     elapsed_time += duration;
+    prev_pump = Some(pump);
   });
 
   let temp_ctx = TranslatedContext::new(
