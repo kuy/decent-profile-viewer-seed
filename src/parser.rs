@@ -27,7 +27,7 @@ fn unsigned_float(i: &[u8]) -> IResult<&[u8], f32> {
 pub enum Prop {
   ExitIf(bool),
   Flow(f32),
-  Volume(u16),
+  Volume(f32),
   MaxFlowOrPressureRange(f32),
   Transition(TransitionType),
   ExitFlowUnder(f32),
@@ -300,24 +300,13 @@ fn prop_bool(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
   }
 }
 
-fn prop_int(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
-  let name = name.to_string();
-  move |i: &[u8]| {
-    let (i, (_, _, val)) = tuple((tag(name.as_bytes()), space1, u16))(i)?;
-    let prop = match name.as_str() {
-      "volume" => Prop::Volume(val),
-      _ => Prop::Unknown((name.clone(), format!("{}", val))),
-    };
-    Ok((i, prop))
-  }
-}
-
 fn prop_number(name: &str) -> impl Fn(&[u8]) -> IResult<&[u8], Prop> {
   let name = name.to_string();
   move |i: &[u8]| {
     let (i, (_, _, val)) = tuple((tag(name.as_bytes()), space1, number_val))(i)?;
     let prop = match name.as_str() {
       "flow" => Prop::Flow(val),
+      "volume" => Prop::Volume(val),
       "max_flow_or_pressure_range" => Prop::MaxFlowOrPressureRange(val),
       "exit_flow_under" => Prop::ExitFlowUnder(val),
       "temperature" => Prop::Temperature(val),
@@ -356,7 +345,7 @@ fn prop(i: &[u8]) -> IResult<&[u8], Prop> {
   alt((
     prop_bool("exit_if"),
     prop_number("flow"),
-    prop_int("volume"),
+    prop_number("volume"),
     prop_number("max_flow_or_pressure_range"),
     prop_enum::<TransitionType>(),
     prop_number("exit_flow_under"),
@@ -450,19 +439,6 @@ mod tests {
   }
 
   #[test]
-  fn test_prop_int() {
-    let prop_volume = prop_int("volume");
-    assert_eq!(
-      prop_volume(b"volume 100;"),
-      Ok((&b";"[..], Prop::Volume(100)))
-    );
-    assert_eq!(
-      prop_volume(b"volume x;"),
-      Err(nom::Err::Error(Error::new(&b"x;"[..], ErrorKind::Digit)))
-    );
-  }
-
-  #[test]
   fn test_prop_enum() {
     let prop_transition = prop_enum::<TransitionType>();
     assert_eq!(
@@ -502,7 +478,7 @@ mod tests {
   #[test]
   fn test_prop() {
     assert_eq!(prop(b"flow 8;"), Ok((&b";"[..], Prop::Flow(8.0))));
-    assert_eq!(prop(b"volume 100;"), Ok((&b";"[..], Prop::Volume(100))));
+    assert_eq!(prop(b"volume 100;"), Ok((&b";"[..], Prop::Volume(100.0))));
     assert_eq!(
       prop(b"exit_pressure_over 1.5;"),
       Ok((&b";"[..], Prop::ExitPressureOver(1.5)))
@@ -519,7 +495,7 @@ mod tests {
         vec![
           Prop::ExitIf(true),
           Prop::Flow(8.0),
-          Prop::Volume(100),
+          Prop::Volume(100.0),
           Prop::MaxFlowOrPressureRange(0.6),
           Prop::Transition(TransitionType::Fast),
           Prop::ExitFlowUnder(0.0),
@@ -549,7 +525,7 @@ mod tests {
         Step(vec![
           Prop::ExitIf(true),
           Prop::Flow(8.0),
-          Prop::Volume(100),
+          Prop::Volume(100.0),
           Prop::MaxFlowOrPressureRange(0.6),
           Prop::Transition(TransitionType::Fast),
           Prop::ExitFlowUnder(0.0),
@@ -575,7 +551,10 @@ mod tests {
       steps(&b"{volume 100}\n{flow 8}\n"[..]),
       Ok((
         &b"\n"[..],
-        vec![Step(vec![Prop::Volume(100),]), Step(vec![Prop::Flow(8.0)])]
+        vec![
+          Step(vec![Prop::Volume(100.0),]),
+          Step(vec![Prop::Flow(8.0)])
+        ]
       ))
     );
 
@@ -588,7 +567,7 @@ mod tests {
           Step(vec![
             Prop::ExitIf(true),
             Prop::Flow(8.0),
-            Prop::Volume(100),
+            Prop::Volume(100.0),
             Prop::MaxFlowOrPressureRange(0.6),
             Prop::Transition(TransitionType::Fast),
             Prop::ExitFlowUnder(0.0),
@@ -606,7 +585,7 @@ mod tests {
           ]),
           Step(vec![
             Prop::ExitIf(false),
-            Prop::Volume(100),
+            Prop::Volume(100.0),
             Prop::MaxFlowOrPressureRange(0.6),
             Prop::Transition(TransitionType::Fast),
             Prop::ExitFlowUnder(0.0),
