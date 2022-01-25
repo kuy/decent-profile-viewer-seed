@@ -225,6 +225,24 @@ impl Step {
       _ => panic!("not found: transition"),
     }
   }
+
+  pub fn exit_flow(&self) -> Option<f32> {
+    match (self.get("exit_if"), self.get("exit_type")) {
+      (Some(Prop::ExitIf(true)), Some(Prop::ExitType(ExitType::FlowOver))) => {
+        match self.get("exit_flow_over") {
+          Some(Prop::ExitFlowOver(v)) => Some(*v),
+          _ => None,
+        }
+      }
+      (Some(Prop::ExitIf(true)), Some(Prop::ExitType(ExitType::FlowUnder))) => {
+        match self.get("exit_flow_under") {
+          Some(Prop::ExitFlowUnder(v)) => Some(*v),
+          _ => None,
+        }
+      }
+      _ => None,
+    }
+  }
 }
 
 impl ParsableEnumProp for ExitType {
