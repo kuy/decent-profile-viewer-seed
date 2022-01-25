@@ -16,8 +16,14 @@ pub static PROFILES: Lazy<HashMap<String, Preset>> = Lazy::new(|| {
     let mut preset = Preset::default();
     let file_name = file.path().file_name().unwrap().to_str().unwrap();
     let data = file.contents_utf8().unwrap().to_string();
+
+    // filter by "Advanced" profile (settings_2c)
+    if data.find("settings_2c").is_none() {
+      continue;
+    }
+
     for line in data.lines() {
-      if line.starts_with("advanced_shot") && !line.ends_with("{}") {
+      if line.starts_with("advanced_shot") {
         let end = line.len() - 1;
         preset.data = format!("{}\n", line[15..end].to_string());
       } else if line.starts_with("profile_title") {
