@@ -3,8 +3,6 @@
 // but some rules are too "annoying" or are not applicable for your case.)
 #![allow(clippy::wildcard_imports)]
 
-mod context;
-mod graph;
 mod msg;
 mod parser;
 mod profile;
@@ -14,9 +12,7 @@ mod view;
 
 use seed::prelude::*;
 use seed::*;
-use web_sys::HtmlCanvasElement;
 
-use graph::draw;
 use msg::Msg;
 use parser::{steps, Step};
 use profile::PROFILES;
@@ -29,14 +25,11 @@ use crate::profile::Preset;
 // ------ ------
 
 // `init` describes what should happen when your app started.
-fn init(_: Url, orders: &mut impl Orders<Msg>) -> Model {
-  orders.after_next_render(|_| Msg::Rendered);
-
+fn init(_: Url, _: &mut impl Orders<Msg>) -> Model {
   Model {
     text: "".into(),
     steps: vec![],
     error: false,
-    canvas: ElRef::default(),
     selected: None,
   }
 }
@@ -50,7 +43,6 @@ struct Model {
   text: String,
   steps: Vec<Step>,
   error: bool,
-  canvas: ElRef<HtmlCanvasElement>,
   selected: Option<String>,
 }
 
@@ -71,18 +63,11 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
         _ => model.error = true,
       }
     }
-    Msg::Rendered => {
-      draw(&model.canvas, &model.steps);
-      orders.after_next_render(|_| Msg::Rendered).skip();
-    }
     Msg::Select(file_name) => {
       model.selected = Some(file_name.clone());
 
       let data = PROFILES.get(&file_name).expect("should exist").data.clone();
       orders.send_msg(Msg::Change(data));
-    }
-    Msg::Hover(_e) => {
-      utils::console_log(format!("hover"));
     }
   }
 }
@@ -100,16 +85,6 @@ fn view(model: &Model) -> Node<Msg> {
     },
     div![
       div![view_svg(&model.steps)],
-      canvas![
-        el_ref(&model.canvas),
-        attrs![
-            At::Width => px(600),
-            At::Height => px(400),
-        ],
-        style![
-            St::Border => "1px solid black",
-        ],
-      ],
       div![view_syntax_error(model.error)],
       div![model.steps.iter().map(|step| view_step(step))],
       hr![],

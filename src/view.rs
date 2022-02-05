@@ -6,7 +6,6 @@ use crate::msg::Msg;
 use crate::parser::Step;
 use crate::profile::{analyze, PositionList};
 use crate::scale::scale;
-use crate::utils::console_log;
 
 static OUTER: Lazy<(f64, f64)> = Lazy::new(|| (600., 400.));
 static INNER: Lazy<(f64, f64, f64, f64)> = Lazy::new(|| (30., 20., 580., 370.));
@@ -48,7 +47,6 @@ fn view_axis() -> Node<Msg> {
 
 fn view_graph(steps: &Vec<Step>) -> Node<Msg> {
   let (temperature_pos, pressure_pos, flow_pos, elapsed_time) = analyze(steps);
-  console_log(format!("{}", temperature_pos.len()));
   g![
     view_graph_temperature(&temperature_pos, elapsed_time),
     view_graph_pressure(&pressure_pos, elapsed_time),
