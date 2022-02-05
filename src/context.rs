@@ -21,6 +21,7 @@ impl TranslatedContext {
 
   pub fn line(&self, x1: f64, y1: f64, x2: f64, y2: f64, color: &str) {
     self.ctx.begin_path();
+    self.ctx.set_line_width(1.25);
     self.ctx.set_stroke_style(&JsValue::from_str(color));
 
     let (tx1, ty1) = self.translate(x1, y1);

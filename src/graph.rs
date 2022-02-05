@@ -151,6 +151,7 @@ pub fn draw(canvas: &ElRef<HtmlCanvasElement>, steps: &Vec<Step>) {
 
 fn draw_axis(ctx: &CanvasRenderingContext2d) {
   ctx.begin_path();
+  ctx.set_line_width(1.25);
   ctx.set_stroke_style(&JsValue::from_str("gray"));
 
   // x-axis
