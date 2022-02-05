@@ -2,6 +2,7 @@ use once_cell::sync::Lazy;
 use seed::prelude::*;
 use seed::*;
 
+use crate::axis::{Axis, Direction};
 use crate::msg::Msg;
 use crate::parser::Step;
 use crate::profile::{analyze, PositionList};
@@ -11,46 +12,39 @@ static OUTER: Lazy<(f64, f64)> = Lazy::new(|| (600., 400.));
 static INNER: Lazy<(f64, f64, f64, f64)> = Lazy::new(|| (30., 20., 580., 370.));
 
 pub fn view_svg(steps: &Vec<Step>) -> Node<Msg> {
+  let (temperature_pos, pressure_pos, flow_pos, elapsed_time) = analyze(steps);
   svg![
     attrs![
         At::Width => px(OUTER.0),
         At::Height => px(OUTER.1),
         At::ViewBox => format!("0 0 {} {}", OUTER.0, OUTER.1),
     ],
-    view_axis(),
-    view_graph(steps),
+    view_axis(elapsed_time),
+    g![
+      view_graph_temperature(&temperature_pos, elapsed_time),
+      view_graph_pressure(&pressure_pos, elapsed_time),
+      view_graph_flow(&flow_pos, elapsed_time),
+    ]
   ]
 }
 
-fn view_axis() -> Node<Msg> {
+fn view_axis(elapsed_time: f64) -> Node<Msg> {
+  let x_axis = Axis::new(
+    (0., elapsed_time),
+    (0., INNER.2 - INNER.0),
+    Direction::Horizontal,
+    10.0,
+  );
+  let y_axis = Axis::new((0., 12.), (0., INNER.1 - INNER.3), Direction::Vertical, 1.0);
   g![
-    line_![attrs![
-      At::X1 => INNER.0,
-      At::Y1 => INNER.1,
-      At::X2 => INNER.0,
-      At::Y2 => INNER.3,
-      At::Stroke => "darkgray",
-      At::StrokeWidth => "1.25px",
-      At::StrokeLinecap => "round",
-    ]],
-    line_![attrs![
-      At::X1 => INNER.0,
-      At::Y1 => INNER.3,
-      At::X2 => INNER.2,
-      At::Y2 => INNER.3,
-      At::Stroke => "darkgray",
-      At::StrokeWidth => "1.25px",
-      At::StrokeLinecap => "round",
-    ]]
-  ]
-}
-
-fn view_graph(steps: &Vec<Step>) -> Node<Msg> {
-  let (temperature_pos, pressure_pos, flow_pos, elapsed_time) = analyze(steps);
-  g![
-    view_graph_temperature(&temperature_pos, elapsed_time),
-    view_graph_pressure(&pressure_pos, elapsed_time),
-    view_graph_flow(&flow_pos, elapsed_time),
+    g![
+      attrs![At::Transform => format!("translate({},{})", INNER.0, INNER.3)],
+      x_axis.render(),
+    ],
+    g![
+      attrs![At::Transform => format!("translate({},{})", INNER.0, INNER.3)],
+      y_axis.render(),
+    ],
   ]
 }
 
