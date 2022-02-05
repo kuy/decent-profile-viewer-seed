@@ -5,17 +5,22 @@
 
 mod context;
 mod graph;
+mod msg;
 mod parser;
 mod profile;
 mod scale;
 mod utils;
+mod view;
 
-use seed::{prelude::*, *};
+use seed::prelude::*;
+use seed::*;
 use web_sys::HtmlCanvasElement;
 
 use graph::draw;
+use msg::Msg;
 use parser::{steps, Step};
 use profile::PROFILES;
+use view::view_svg;
 
 use crate::profile::Preset;
 
@@ -53,13 +58,6 @@ struct Model {
 //    Update
 // ------ ------
 
-// `Msg` describes the different events you can modify state with.
-enum Msg {
-  Change(String),
-  Rendered,
-  Select(String),
-}
-
 // `update` describes how to handle each `Msg`.
 fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
   match msg {
@@ -83,6 +81,9 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
       let data = PROFILES.get(&file_name).expect("should exist").data.clone();
       orders.send_msg(Msg::Change(data));
     }
+    Msg::Hover(_e) => {
+      utils::console_log(format!("hover"));
+    }
   }
 }
 
@@ -98,6 +99,7 @@ fn view(model: &Model) -> Node<Msg> {
         St::FlexDirection => "row",
     },
     div![
+      div![view_svg(&model.steps)],
       canvas![
         el_ref(&model.canvas),
         attrs![
