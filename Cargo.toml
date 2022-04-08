@@ -15,7 +15,7 @@ crate-type = ["cdylib"]
 wasm-bindgen-test = "0.3.29"
 
 [dependencies]
-seed = "0.8.0"
+seed = "0.9.0"
 nom = "7"
 once_cell = "1.10.0"
 include_dir = "0.7.2"
